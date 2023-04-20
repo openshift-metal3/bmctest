@@ -54,6 +54,12 @@ platform:
           disableCertificateVerification: true
 ```
 
+## NOTE:
+
+Running `bmctest.sh` directly is currently broken as it does not play well with
+the upstream Ironic image. Please use `ocpbmctest.sh` which uses the OpenShift
+Ironic image for the time being.
+
 Example minimal `config.yaml` that `bmctest.sh` needs:
 (only needed for running `bmctest.sh` directly for upstream Ironic, otherwise
 automatically generated from `install-config.yaml` by `ocpbmctest.sh`)
