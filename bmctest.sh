@@ -106,8 +106,9 @@ if nc -z localhost "$HTTP_PORT"; then
 fi
 
 timestamp "starting ironic container"
-sudo podman run --authfile "$PULL_SECRET" --rm -d --net host --env PROVISIONING_INTERFACE="${INTERFACE}" \
-    --env HTTP_PORT="$HTTP_PORT" --env OS_CLOUD=bmctest -v /srv/ironic:/shared --name bmctest \
+sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
+    --env PROVISIONING_INTERFACE="${INTERFACE}" --env HTTP_PORT="$HTTP_PORT" \
+    --env OS_CLOUD=bmctest -v /srv/ironic:/shared --name bmctest \
     --entrypoint sleep "$IRONICIMAGE" infinity
 
 # configure baremetal to run inside container
