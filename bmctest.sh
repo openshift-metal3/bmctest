@@ -81,8 +81,7 @@ if ! command -v yq > /dev/null 2>&1; then
 fi
 if ! command -v parallel > /dev/null 2>&1; then
     sudo dnf install -y parallel
-    mkdir -p ~/.parallel
-    touch ~/.parallel/will-cite
+    echo "will cite" | parallel --citation > /dev/null 2>&1
 fi
 
 timestamp "checking / getting ISO image"
