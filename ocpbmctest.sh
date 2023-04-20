@@ -8,17 +8,22 @@ set -eu
 # defaults
 RELEASE="4.13"
 PULL_SECRET="/opt/dev-scripts/pull_secret.json"
+HTTP_PORT="6380"
 
 function usage {
     echo "USAGE:"
-    echo "./$(basename "$0") [-r release_version] -c install-config.yaml"
+    echo "./$(basename "$0") [-r release_version] [-p http_port] [-s pull_secret] -c install-config.yaml"
     echo "release version defaults to $RELEASE"
+    echo "http_port defaults to $HTTP_PORT"
+    echo "pull_secret defaults to $PULL_SECRET"
 }
 
-while getopts "r:c:h" opt; do
+while getopts "r:p:s:c:h" opt; do
     case $opt in
         h) usage; exit 0 ;;
         r) RELEASE=$OPTARG ;;
+        p) HTTP_PORT=$OPTARG ;;
+        s) PULL_SECRET=$OPTARG ;;
         c) CONFIGFILE=$OPTARG ;;
         ?) usage; exit 1 ;;
     esac
@@ -83,4 +88,4 @@ yq -y '{hosts: [.platform.baremetal.hosts[] | {
         }]}' "$CONFIGFILE" > "$INPUTFILE"
 
 timestamp "calling bmctest.sh"
-"$(dirname "$0")"/bmctest.sh -i "$IRONICIMAGE" -I "$INTERFACE" -s "$PULL_SECRET" -c "$INPUTFILE"
+"$(dirname "$0")"/bmctest.sh -i "$IRONICIMAGE" -I "$INTERFACE" -p "$HTTP_PORT" -s "$PULL_SECRET" -c "$INPUTFILE"
