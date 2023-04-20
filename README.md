@@ -21,9 +21,12 @@ upstream compatible with Ironic, leaving out the OpenShift specifics.
 
 # Requirements
 
-Scripts need to be run as unprivileged user with passwordless sudo
+Scripts need to be run as unprivileged user with passwordless sudo.
+Firewall: the servers that are tested need to be able to reach Ironic (TCP 6385)
+and httpd (configurable, default TCP 6380). Note: Dell actually checks it can
+mount the ISO via http, HP does not check.
 
-Eache script checks for dependencies and attempts to automatically install them
+Each script checks for dependencies and attempts to automatically install them
 with dnf for RPM distros:
 - yq (the pip version)
 - podman
@@ -32,6 +35,9 @@ with dnf for RPM distros:
 - nc
 
 # Configuration
+
+No whitespace is allowed anywhere in the yaml config files as they are parsed
+with basic shell.
 
 Example minimal `install-config.yaml` that `ocpbmctest.sh` needs:
 
@@ -54,7 +60,10 @@ platform:
           disableCertificateVerification: true
 ```
 
-## NOTE:
+provisioningBridge - the interface on the host the script is run on that ironic
+and http will bind to.
+
+### Note:
 
 Running `bmctest.sh` directly is currently broken as it does not play well with
 the upstream Ironic image. Please use `ocpbmctest.sh` which uses the OpenShift
