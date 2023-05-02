@@ -40,17 +40,13 @@ function timestamp {
     echo "$1"
 }
 
-timestamp "checking/installing dependencies (passwordless sudo, yq)"
+timestamp "checking/installing dependencies (passwordless sudo, yq, curl, podman)"
 if ! sudo true; then
     echo "ERROR: passwordless sudo not available"
     exit 1
 fi
-if ! command -v yq > /dev/null 2>&1; then
-    if ! command -v pip3 > /dev/null 2>&1; then
-        sudo dnf install python3-pip
-    fi
-    pip3 install yq
-fi
+sudo dnf install -y curl podman python3-pip
+python3 -m pip install yq
 
 timestamp "getting the release image url"
 RELEASEIMAGE=$(curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/latest-"${RELEASE}"/release.txt \
