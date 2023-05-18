@@ -11,15 +11,17 @@ ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/37.2
 # use the upstream ironic image by default
 IRONICIMAGE="quay.io/metal3-io/ironic:latest"
 export HTTP_PORT="6380"
+export TIMEOUT="120"
 
 function usage {
     echo "USAGE:"
-    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] -s pull_secret.json -c config.yaml"
+    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-t timeout]  -s pull_secret.json -c config.yaml"
     echo "ironic image defaults to $IRONICIMAGE"
     echo "http_port defaults to $HTTP_PORT"
+    echo "timeout defaults to $TIMEOUT, it is used in 3 places for each tested machine"
 }
 
-while getopts "i:I:s:c:p:h" opt; do
+while getopts "i:I:s:c:p:t:h" opt; do
     case $opt in
         h) usage; exit 0 ;;
         i) IRONICIMAGE=$OPTARG ;;
@@ -27,6 +29,7 @@ while getopts "i:I:s:c:p:h" opt; do
         s) PULL_SECRET=$OPTARG ;;
         c) CONFIGFILE=$OPTARG ;;
         p) HTTP_PORT=$OPTARG ;;
+        t) TIMEOUT=$OPTARG ;;
         ?) usage; exit 1 ;;
     esac
 done
@@ -119,7 +122,6 @@ sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
 timestamp "starting httpd process"
 sudo podman exec -d bmctest bash -c "/bin/runhttpd > /tmp/httpd.log 2>&1"
 
-# FIXME - take --wait as argument to script
 # see https://github.com/openshift/baremetal-operator/blob/master/docs/api.md
 function test_manage {
     local name=$1; local boot=$2; local protocol=$3; local address=$4; local systemid=$5; local user=$6; local pass=$7; local insecure=$8
@@ -151,7 +153,7 @@ function test_manage {
         --driver-info redfish_password="$pass" --property capabilities='boot_mode:uefi' \
         "$extra" --name "$name" > /dev/null
     echo -n "    " # indent baremetal output
-    if ! bmwrap node manage "$name" --wait 60; then
+    if ! bmwrap node manage "$name" --wait "$TIMEOUT"; then
         echo "can not manage node $name" >> "$ERROR_LOG"
         return 1
     fi
@@ -188,9 +190,9 @@ function test_boot_vmedia {
     --instance-info boot_iso="http://${ip}:${HTTP_PORT}/images/${ISO}"
     bmwrap node set "$name" --no-automated-clean
     echo -n "    " # indent baremetal output
-    bmwrap node provide --wait 60 "$name"
+    bmwrap node provide --wait "$TIMEOUT" "$name"
     echo -n "    " # indent baremetal output
-    if ! bmwrap node deploy --wait 120 "$name"; then
+    if ! bmwrap node deploy --wait "$TIMEOUT" "$name"; then
         echo "failed to boot node $name from ISO" >> "$ERROR_LOG"
         return 1
     fi
