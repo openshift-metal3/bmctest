@@ -64,9 +64,14 @@ if ! sudo true; then
     echo "ERROR: passwordless sudo not available"
     exit 1
 fi
-sudo dnf install -y curl nc podman python3-pip parallel
-python3 -m pip install yq
-echo "will cite" | parallel --citation > /dev/null 2>&1
+for dep in curl nc podman yq parallel; do
+    if ! command -v $dep > /dev/null 2>&1; then
+        sudo dnf install -y curl nc podman python3-pip parallel
+        python3 -m pip install yq
+        echo "will cite" | parallel --citation > /dev/null 2>&1
+        break
+    fi
+done
 
 timestamp "checking / getting ISO image"
 if sudo [ ! -e /srv/ironic/html/images/${ISO} ]; then
