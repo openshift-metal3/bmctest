@@ -257,4 +257,9 @@ EXIT=$(wc -l "$ERROR_LOG" | cut -d ' '  -f 1)
 echo; echo "========== Found $EXIT errors =========="
 cat "$ERROR_LOG"
 echo
+if ! [ "$EXIT" -eq 0 ]; then
+    logf="ironic.log_$(date +%Y-%m-%d_%H-%M)"
+    echo; echo "Errors found, saving container logs as $logf"
+    sudo podman cp bmctest:/tmp/ironic.log "./$logf"
+fi
 exit "$EXIT"
