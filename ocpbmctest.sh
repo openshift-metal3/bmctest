@@ -48,9 +48,9 @@ if ! sudo true; then
     echo "ERROR: passwordless sudo not available"
     exit 1
 fi
-for dep in curl yq podman; do
+for dep in curl jq yq podman; do
     if ! command -v $dep > /dev/null 2>&1; then
-        sudo dnf install -y curl podman python3-pip
+        sudo dnf install -y curl jq podman python3-pip
         python3 -m pip install yq
         break
     fi

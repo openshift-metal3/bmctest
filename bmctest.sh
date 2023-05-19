@@ -67,9 +67,9 @@ if ! sudo true; then
     echo "ERROR: passwordless sudo not available"
     exit 1
 fi
-for dep in curl nc podman yq parallel; do
+for dep in curl nc podman jq yq parallel; do
     if ! command -v $dep > /dev/null 2>&1; then
-        sudo dnf install -y curl nc podman python3-pip parallel
+        sudo dnf install -y curl nc jq podman python3-pip parallel
         python3 -m pip install yq
         echo "will cite" | parallel --citation > /dev/null 2>&1
         break

@@ -22,12 +22,17 @@ upstream compatible with Ironic, leaving out the OpenShift specifics.
 # Requirements
 
 Scripts need to be run as unprivileged user with passwordless sudo.
+
+EPEL repository is required for GNU parallel.
+
 Firewall: the servers that are tested need to be able to reach Ironic (TCP 6385)
 and httpd (configurable, default TCP 6380). Note: Dell actually checks it can
 mount the ISO via http, HP does not check.
 
 Each script checks for dependencies and attempts to automatically install them
 with dnf for RPM distros:
+- jq
+- python3-pip
 - yq (the pip version)
 - podman
 - curl
