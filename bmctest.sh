@@ -10,13 +10,16 @@ export ISO="fedora-coreos-37.20230205.3.0-live.x86_64.iso"
 ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/37.20230205.3.0/x86_64/$ISO"
 # use the upstream ironic image by default
 IRONICIMAGE="quay.io/metal3-io/ironic:latest"
+IRONICCLIENT="quay.io/metal3-io/ironic-client"
+PULL_SECRET=""
 export HTTP_PORT="6380"
 export TIMEOUT="120"
 
 function usage {
     echo "USAGE:"
-    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-t timeout]  -s pull_secret.json -c config.yaml"
+    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-t timeout]  [-s pull_secret.json] -c config.yaml"
     echo "ironic image defaults to $IRONICIMAGE"
+    echo "pull_secret is only needed for openshift ironic image, not upstream"
     echo "http_port defaults to $HTTP_PORT"
     echo "timeout defaults to $TIMEOUT, it is used in 3 places for each tested machine"
 }
@@ -40,9 +43,8 @@ if [[ -z ${INTERFACE:-} ]]; then
     exit 1
 fi
 
-# FIXME pull secret not needed when using upstream ironic image
-if [[ ! -e ${CONFIGFILE:-} || ! -e ${PULL_SECRET:-} ]]; then
-    echo "invalid config file or pull secret file"
+if [[ ! -e ${CONFIGFILE:-} ]]; then
+    echo "invalid config file $CONFIGFILE"
     usage
     exit 1
 fi
@@ -56,8 +58,9 @@ export -f timestamp
 ERROR_LOG=$(mktemp)
 export ERROR_LOG
 function cleanup {
-    timestamp "cleaning up - removing container"
+    timestamp "cleaning up - removing container(s)"
     sudo podman rm -f -t 0 bmctest
+    sudo podman rm -f -t 0 bmcicli
     rm -rf "$ERROR_LOG"
 }
 trap "cleanup" EXIT
@@ -82,8 +85,9 @@ if sudo [ ! -e /srv/ironic/html/images/${ISO} ]; then
     sudo curl -L $ISO_URL -o /srv/ironic/html/images/${ISO}
 fi
 
-timestamp "checking / cleaning old container"
+timestamp "checking / cleaning old containers"
 sudo podman rm -f -t 0 bmctest
+sudo podman rm -f -t 0 bmcicli
 
 timestamp "checking TCP 6385 port for Ironic is not already in use"
 if nc -z localhost 6385; then
@@ -97,21 +101,33 @@ if nc -z localhost "$HTTP_PORT"; then
     exit 1
 fi
 
-timestamp "starting ironic container"
+timestamp "starting ironic server container"
 sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
     --env PROVISIONING_INTERFACE="${INTERFACE}" --env HTTP_PORT="$HTTP_PORT" \
     --env OS_CLOUD=bmctest -v /srv/ironic:/shared --name bmctest \
     --entrypoint sleep "$IRONICIMAGE" infinity
 
-# configure baremetal to run inside container
-sudo podman exec bmctest bash -c "mkdir -p /etc/openstack"
-sudo podman cp clouds.yaml bmctest:/etc/openstack/clouds.yaml
-# FIXME python depreciation warnings inside container
-sudo podman exec bmctest bash -c "echo -e '#!/usr/bin/env bash\npython3 -W ignore /usr/bin/baremetal \$@' > /usr/local/bin/bm"
-sudo podman exec bmctest bash -c "chmod +x /usr/local/bin/bm"
-function bmwrap {
-    sudo podman exec bmctest bm "$@"
-}
+# baremetal cli runs either in the ironic server or ironic client container
+# depending if we run upstream or openshift ironic
+if [[ -z "$PULL_SECRET" ]]; then
+    timestamp "starting ironic client container"
+    sudo podman run --privileged --rm -d --net host --env  OS_CLOUD=bmctest \
+        --name bmcicli --entrypoint sleep $IRONICCLIENT infinity
+    sudo podman exec bmcicli bash -c "mkdir -p /etc/openstack"
+    sudo podman cp clouds.yaml bmcicli:/etc/openstack/clouds.yaml
+    function bmwrap {
+        sudo podman exec bmcicli baremetal $@ # no quotes, we actually want splitting
+    }
+else
+    sudo podman exec bmctest bash -c "mkdir -p /etc/openstack"
+    sudo podman cp clouds.yaml bmctest:/etc/openstack/clouds.yaml
+    # FIXME python depreciation warnings inside container
+    sudo podman exec bmctest bash -c "echo -e '#!/usr/bin/env bash\npython3 -W ignore /usr/bin/baremetal \$@' > /usr/local/bin/bm"
+    sudo podman exec bmctest bash -c "chmod +x /usr/local/bin/bm"
+    function bmwrap {
+        sudo podman exec bmctest bm "$@"
+    }
+fi
 export -f bmwrap
 
 # starting ironic

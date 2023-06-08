@@ -44,6 +44,7 @@ with dnf for RPM distros:
 No whitespace is allowed anywhere in the yaml config files as they are parsed
 with basic shell.
 
+### For OpenShift Ironic
 Example minimal `install-config.yaml` that `ocpbmctest.sh` needs:
 
 ```
@@ -65,15 +66,10 @@ platform:
           disableCertificateVerification: true
 ```
 
-provisioningBridge - the interface on the host the script is run on that ironic
+`provisioningBridge` - the interface on the host the script is run on that ironic
 and http will bind to.
 
-### Note:
-
-Running `bmctest.sh` directly is currently broken as it does not play well with
-the upstream Ironic image. Please use `ocpbmctest.sh` which uses the OpenShift
-Ironic image for the time being.
-
+### For upstream Ironic
 Example minimal `config.yaml` that `bmctest.sh` needs:
 (only needed for running `bmctest.sh` directly for upstream Ironic, otherwise
 automatically generated from `install-config.yaml` by `ocpbmctest.sh`)
@@ -84,7 +80,7 @@ hosts:
       bmc:
           boot: idrac-virtualmedia
           protocol: https
-          address: 192.168.0.1
+          address: 192.168.0.101
           systemid: /redfish/v1/Systems/System.Embedded.1
           username: root
           password: calvin
@@ -93,10 +89,13 @@ hosts:
       bmc:
           boot: redfish-virtualmedia
           protocol: https
-          address: 192.168.0.1
-          systemid: /redfish/v1/Systems/System.Embedded.1
+          address: 192.168.0.102
+          systemid: /redfish/v1/Systems/1
           username: Administrator
           password: password
           insecure: true
 ```
+
+`insecure` is the equivalent of `disableCertificateVerification`, meaning it
+will not check the https certificate of the BMC.
 

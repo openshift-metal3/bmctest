@@ -32,11 +32,13 @@ while getopts "r:p:s:t:c:h" opt; do
     esac
 done
 
-if [[ ! -e ${CONFIGFILE:-} ]]; then
-    echo "invalid config file"
-    usage
-    exit 1
-fi
+for afile in ${CONFIGFILE:-} ${PULL_SECRET:-}; do
+    if [[ ! -e "$afile" ]]; then
+        echo "invalid config/pull_secret file $afile"
+        usage
+        exit 1
+    fi
+done
 
 function timestamp {
     echo -n "$(date +%T) "
