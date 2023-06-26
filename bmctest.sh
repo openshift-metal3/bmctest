@@ -12,19 +12,22 @@ ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/37.2
 IRONICIMAGE="quay.io/metal3-io/ironic:latest"
 IRONICCLIENT="quay.io/metal3-io/ironic-client"
 PULL_SECRET=""
-export HTTP_PORT="6380"
+# defaults
+export HTTP_PORT="8080"
+export TLS_PORT="false"
 export TIMEOUT="120"
 
 function usage {
     echo "USAGE:"
-    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-t timeout]  [-s pull_secret.json] -c config.yaml"
+    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-T tls_port] [-t timeout] [-s pull_secret.json] -c config.yaml"
     echo "ironic image defaults to $IRONICIMAGE"
-    echo "pull_secret is only needed for openshift ironic image, not upstream"
-    echo "http_port defaults to $HTTP_PORT"
+    echo "only specify pull_secret for openshift ironic image, not upstream"
+    echo "http_port for virtual media defaults to $HTTP_PORT"
+    echo "-T tls_port switches virtual media to HTTPS"
     echo "timeout defaults to $TIMEOUT, it is used in 3 places for each tested machine"
 }
 
-while getopts "i:I:s:c:p:t:h" opt; do
+while getopts "i:I:s:c:p:T:t:h" opt; do
     case $opt in
         h) usage; exit 0 ;;
         i) IRONICIMAGE=$OPTARG ;;
@@ -32,6 +35,7 @@ while getopts "i:I:s:c:p:t:h" opt; do
         s) PULL_SECRET=$OPTARG ;;
         c) CONFIGFILE=$OPTARG ;;
         p) HTTP_PORT=$OPTARG ;;
+        T) TLS_PORT=$OPTARG ;;
         t) TIMEOUT=$OPTARG ;;
         ?) usage; exit 1 ;;
     esac
@@ -95,20 +99,30 @@ if nc -z localhost 6385; then
     exit 1
 fi
 
-timestamp "checking TCP $HTTP_PORT port for httpd is not already in use"
+timestamp "checking TCP $HTTP_PORT port for http is not already in use"
 if nc -z localhost "$HTTP_PORT"; then
-    echo "ERROR: httpd port already in use, exiting"
+    echo "ERROR: http port already in use, exiting"
     exit 1
 fi
+
+if [[ "$TLS_PORT" != "false" ]]; then
+    timestamp "checking TCP $TLS_PORT port for https is not already in use"
+    if nc -z localhost "$TLS_PORT"; then
+        echo "ERROR: https port already in use, exiting"
+        exit 1
+    fi
+fi
+
 
 timestamp "starting ironic server container"
 sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
     --env PROVISIONING_INTERFACE="${INTERFACE}" --env HTTP_PORT="$HTTP_PORT" \
+    --env IRONIC_VMEDIA_TLS_SETUP="$TLS_PORT" --env VMEDIA_TLS_PORT="$TLS_PORT"  \
     --env OS_CLOUD=bmctest -v /srv/ironic:/shared --name bmctest \
     --entrypoint sleep "$IRONICIMAGE" infinity
 
 # baremetal cli runs either in the ironic server or ironic client container
-# depending if we run upstream or openshift ironic
+# depending if we run openshift or upstream ironic
 if [[ -z "$PULL_SECRET" ]]; then
     timestamp "starting ironic client container"
     sudo podman run --privileged --rm -d --net host --env  OS_CLOUD=bmctest \
@@ -130,13 +144,24 @@ else
 fi
 export -f bmwrap
 
-# starting ironic
-timestamp "starting ironic process"
-sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
-
 # starting httpd
 timestamp "starting httpd process"
+if [[ "$TLS_PORT" != "false" ]]; then
+    sudo podman exec bmctest bash -c "
+        mkdir -p /certs/vmedia && cd /certs/vmedia
+        make-dummy-cert bundle
+        csplit -f tls --suppress-matched bundle /^$/
+        mv tls00 tls.key && chmod 600 tls.key
+        mv tls01 tls.crt && rm bundle"
+fi
 sudo podman exec -d bmctest bash -c "/bin/runhttpd > /tmp/httpd.log 2>&1"
+
+# starting ironic
+timestamp "starting ironic process"
+if [[ "$TLS_PORT" != "false" ]]; then
+    sudo podman exec bmctest bash -c "sed -i '2i webserver_verify_ca = False' /etc/ironic/ironic.conf.j2"
+fi
+sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
 
 # see https://github.com/openshift/baremetal-operator/blob/master/docs/api.md
 function test_manage {
@@ -190,10 +215,10 @@ export -f test_power
 function test_boot_vmedia {
     local name=$1; local boot=$2
     case $boot in
-        idrac-virtualmedia|idrac)
+        idrac-virtualmedia)
             local boot_if="idrac-redfish-virtual-media"
             ;;
-        redfish-virtualmedia|redfish)
+        redfish-virtualmedia)
             local boot_if="redfish-virtual-media"
             ;;
         *)
@@ -202,8 +227,14 @@ function test_boot_vmedia {
     esac
     local ip
     ip=$(ip route get 1.1.1.1 | awk '{printf $7}')
+    local protocol; local port
+    if [[ "$TLS_PORT" != "false" ]]; then
+        protocol="https"; port="$TLS_PORT"
+    else
+        protocol="http"; port="$HTTP_PORT"
+    fi
     bmwrap node set "$name" --boot-interface "$boot_if" --deploy-interface ramdisk \
-    --instance-info boot_iso="http://${ip}:${HTTP_PORT}/images/${ISO}"
+        --instance-info boot_iso="${protocol}://${ip}:${port}/images/${ISO}"
     bmwrap node set "$name" --no-automated-clean
     echo -n "    " # indent baremetal output
     bmwrap node provide --wait "$TIMEOUT" "$name"
