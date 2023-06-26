@@ -24,7 +24,7 @@ function usage {
     echo "only specify pull_secret for openshift ironic image, not upstream"
     echo "http_port for virtual media defaults to $HTTP_PORT"
     echo "-T tls_port switches virtual media to HTTPS"
-    echo "timeout defaults to $TIMEOUT, it is used in 3 places for each tested machine"
+    echo "timeout defaults to $TIMEOUT, it is used in 4 places for each tested machine"
 }
 
 while getopts "i:I:s:c:p:T:t:h" opt; do
@@ -204,7 +204,7 @@ export -f test_manage
 function test_power {
     local name=$1
     for power in on off; do
-        if ! bmwrap node power "$power" "$name" --power-timeout 60; then
+        if ! bmwrap node power "$power" "$name" --power-timeout "$TIMEOUT"; then
             echo "can not power $power ${name}" >> "$ERROR_LOG"
             return 1
         fi

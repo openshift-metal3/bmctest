@@ -19,7 +19,7 @@ function usage {
     echo "http_port for virtual media defaults to $HTTP_PORT"
     echo "-T tls_port switches virtual media to HTTPS"
     echo "pull_secret defaults to $PULL_SECRET"
-    echo "timeout defaults to $TIMEOUT, it is used in 3 places for each tested machine"
+    echo "timeout defaults to $TIMEOUT, it is used in 4 places for each tested machine"
 }
 
 while getopts "r:p:T:s:t:c:h" opt; do
@@ -66,7 +66,6 @@ RELEASEIMAGE=$(curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp
     | grep -o 'quay.io/openshift-release-dev/ocp-release.*')
 
 
-# upstream version will use a metal3 ironic image
 timestamp "creating the ironic image"
 IRONICIMAGE=$(podman run --rm "$RELEASEIMAGE" image ironic)
 
