@@ -1,1 +1,3 @@
 ironic.log_*
+*.yaml
+!clouds.yaml
