@@ -44,6 +44,11 @@ with dnf for RPM distros:
 No whitespace is allowed anywhere in the yaml config files as they are parsed
 with basic shell.
 
+Supported boot methods are:
+- redfish-virtualmedia
+- idrac-virtualmedia
+- ilo5-virtualmedia (the driver does not support ejecting virtual media)
+
 ### For OpenShift Ironic
 Example minimal `install-config.yaml` that `ocpbmctest.sh` needs:
 

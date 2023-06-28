@@ -163,23 +163,8 @@ if [[ "$TLS_PORT" != "false" ]]; then
 fi
 sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
 
-# see https://github.com/openshift/baremetal-operator/blob/master/docs/api.md
 function test_manage {
     local name=$1; local boot=$2; local protocol=$3; local address=$4; local systemid=$5; local user=$6; local pass=$7; local insecure=$8
-    case $boot in
-        idrac-virtualmedia)
-            local driver="idrac"
-            local extra="--driver-info drac_address=$address --driver-info drac_username=$user --driver-info drac_password=$pass \
-                --bios-interface idrac-redfish --management-interface idrac-redfish --power-interface idrac-redfish \
-                --raid-interface idrac-redfish --vendor-interface idrac-redfish"
-            ;;
-        redfish-virtualmedia)
-            local driver="redfish"
-            ;;
-        *)
-            echo "unsupported boot method \"$boot\" for $name" >> "$ERROR_LOG"
-            return 1
-    esac
     case $insecure in
         null | False | false | no | No)
             local verify_ca="True"
@@ -188,11 +173,33 @@ function test_manage {
             local verify_ca="False"
             ;;
     esac
-    bmwrap node create --driver "$driver" \
-        --driver-info redfish_address="${protocol}://${address}" --driver-info redfish_system_id="$systemid" \
-        --driver-info redfish_verify_ca=$verify_ca --driver-info redfish_username="$user" \
-        --driver-info redfish_password="$pass" --property capabilities='boot_mode:uefi' \
-        "$extra" --name "$name" > /dev/null
+    local redfish_info="
+        --driver-info redfish_address=${protocol}://${address} --driver-info redfish_system_id=${systemid}
+        --driver-info redfish_username=${user} --driver-info redfish_password=${pass}
+        --driver-info redfish_verify_ca=${verify_ca}"
+    local idrac_info="
+        ${redfish_info}
+        --driver-info drac_address=${address} --driver-info drac_username=${user} --driver-info drac_password=${pass}
+        --bios-interface idrac-redfish --management-interface idrac-redfish --power-interface idrac-redfish
+        --raid-interface idrac-redfish --vendor-interface idrac-redfish"
+    local ilo5_info="
+        --driver-info ilo_address=${address} --driver-info ilo_username=${user} --driver-info ilo_password=${pass}
+        --driver-info ilo_verify_ca=${verify_ca}
+        --driver-info deploy_kernel='http://example.com/kernel' --driver-info deploy_ramdisk='http://example.com/ramdisk'"
+        # ilo5 driver checks for kernel and ramdisk are set even if no automated clean, must be a bug
+    case $boot in
+        # see https://github.com/openshift/baremetal-operator/blob/master/docs/api.md
+        idrac-virtualmedia)
+            local driver="idrac"; local driver_info=$idrac_info ;;
+        redfish-virtualmedia)
+            local driver="redfish"; local driver_info=$redfish_info ;;
+        ilo5-virtualmedia)
+            local driver="ilo5"; local driver_info=$ilo5_info ;;
+        *)
+            echo "unsupported boot method \"$boot\" for $name" >> "$ERROR_LOG"
+            return 1
+    esac
+    bmwrap node create --driver "$driver" "$driver_info" --property capabilities='boot_mode:uefi' --name "$name" > /dev/null
     echo -n "    " # indent baremetal output
     if ! bmwrap node manage "$name" --wait "$TIMEOUT"; then
         echo "can not manage node $name" >> "$ERROR_LOG"
@@ -216,11 +223,11 @@ function test_boot_vmedia {
     local name=$1; local boot=$2
     case $boot in
         idrac-virtualmedia)
-            local boot_if="idrac-redfish-virtual-media"
-            ;;
+            local boot_if="idrac-redfish-virtual-media" ;;
         redfish-virtualmedia)
-            local boot_if="redfish-virtual-media"
-            ;;
+            local boot_if="redfish-virtual-media" ;;
+        ilo5-virtualmedia)
+            local boot_if="ilo-virtual-media" ;;
         *)
             echo "unknown boot method \"$boot\" for $name" >> "$ERROR_LOG"
             return 1
@@ -256,7 +263,11 @@ function test_boot_device {
 export -f test_boot_device
 
 function test_eject_media {
-   local name=$1
+   local name=$1; local boot=$2
+   if [[ $boot = "ilo5-virtualmedia" ]]; then
+       echo "WARNING: ilo5 does not support eject vmedia, not testing"
+       return 0
+   fi
    if ! bmwrap node passthru call "$name" eject_vmedia; then
         echo "failed to eject media on $name" >> "$ERROR_LOG"
         return 1
@@ -287,7 +298,7 @@ function test_node {
     fi
 
     timestamp "testing vmedia detach on $name"
-    if test_eject_media "$name"; then
+    if test_eject_media "$name" "$boot"; then
         echo "    success"
     fi
 
