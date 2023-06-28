@@ -5,6 +5,8 @@ set -eu
 # bmctest.sh tests the hosts from the supplied yaml config file
 # are working with the required ironic opperations (register, power, virtual media)
 
+# this is used to skip the tests if we fail to start ironic
+SKIP_TESTS="false"
 # FIXME stable URL?
 export ISO="fedora-coreos-37.20230205.3.0-live.x86_64.iso"
 ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/37.20230205.3.0/x86_64/$ISO"
@@ -162,6 +164,11 @@ if [[ "$TLS_PORT" != "false" ]]; then
     sudo podman exec bmctest bash -c "sed -i '2i webserver_verify_ca = False' /etc/ironic/ironic.conf.j2"
 fi
 sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
+sleep 5
+if ! sudo podman exec bmctest bash -c "pidof python3 > /dev/null"; then
+    echo "no python3 process inside container, looks like ironic failed to start, not running tests, check log" >> "$ERROR_LOG"
+    SKIP_TESTS="true"
+fi
 
 function test_manage {
     local name=$1; local boot=$2; local protocol=$3; local address=$4; local systemid=$5; local user=$6; local pass=$7; local insecure=$8
@@ -309,9 +316,11 @@ function test_node {
 }
 export -f test_node
 
-timestamp "testing, can take several minutes, please wait for results ..."
-yq -r '.hosts[] | "\(.name) \(.bmc.boot) \(.bmc.protocol) \(.bmc.address) \(.bmc.systemid) \(.bmc.username) \(.bmc.password) \(.bmc.insecure)"' \
+if [[ "$SKIP_TESTS" = "false" ]]; then
+    timestamp "testing, can take several minutes, please wait for results ..."
+    yq -r '.hosts[] | "\(.name) \(.bmc.boot) \(.bmc.protocol) \(.bmc.address) \(.bmc.systemid) \(.bmc.username) \(.bmc.password) \(.bmc.insecure)"' \
     "$CONFIGFILE" | parallel --colsep ' ' -a - test_node
+fi
 
 EXIT=$(wc -l "$ERROR_LOG" | cut -d ' '  -f 1)
 echo; echo "========== Found $EXIT errors =========="
