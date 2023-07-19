@@ -165,7 +165,7 @@ if [[ "$TLS_PORT" != "false" ]]; then
 fi
 sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
 sleep 5
-if ! sudo podman exec bmctest bash -c "pidof python3 > /dev/null"; then
+if ! sudo podman exec bmctest bash -c "ls -l /proc/*/exe | grep -q python3"; then
     echo "no python3 process inside container, looks like ironic failed to start, not running tests, check log" >> "$ERROR_LOG"
     SKIP_TESTS="true"
 fi
