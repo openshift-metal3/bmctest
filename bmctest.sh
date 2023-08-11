@@ -132,6 +132,7 @@ if [[ -z "$PULL_SECRET" ]]; then
     sudo podman exec bmcicli bash -c "mkdir -p /etc/openstack"
     sudo podman cp clouds.yaml bmcicli:/etc/openstack/clouds.yaml
     function bmwrap {
+        # shellcheck disable=SC2068
         sudo podman exec bmcicli baremetal $@ # no quotes, we actually want splitting
     }
 else
