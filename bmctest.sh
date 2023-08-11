@@ -80,7 +80,7 @@ for dep in curl nc podman jq yq parallel; do
     if ! command -v $dep > /dev/null 2>&1; then
         sudo dnf install -y curl nc jq podman python3-pip parallel
         python3 -m pip install yq
-        echo "will cite" | parallel --citation > /dev/null 2>&1
+        echo "will cite" | parallel --citation > /dev/null 2>&1 || true
         break
     fi
 done
