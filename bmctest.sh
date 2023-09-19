@@ -17,7 +17,7 @@ PULL_SECRET=""
 # defaults
 export HTTP_PORT="8080"
 export TLS_PORT="false"
-export TIMEOUT="120"
+export TIMEOUT="300"
 
 function usage {
     echo "USAGE:"
@@ -68,6 +68,7 @@ function cleanup {
     sudo podman rm -f -t 0 bmctest
     sudo podman rm -f -t 0 bmcicli
     rm -rf "$ERROR_LOG"
+    echo -ne "\a" # bell
 }
 trap "cleanup" EXIT
 
@@ -294,21 +295,25 @@ function test_node {
        echo "    failed to manage $name - can not run further tests on node"
        return 0
     fi
+    sleep 10
 
     timestamp "verifying node boot device can be set on $name"
     if test_boot_device "$name"; then
         echo "    success"
     fi
+    sleep 10
 
     timestamp "testing booting from redfish-virtual-media on $name"
     if test_boot_vmedia "$name" "$boot"; then
         echo "    success"
     fi
+    sleep 30
 
     timestamp "testing vmedia detach on $name"
     if test_eject_media "$name" "$boot"; then
         echo "    success"
     fi
+    sleep 10
 
     timestamp "testing ability to power on/off $name"
     if test_power "$name"; then

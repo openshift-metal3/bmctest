@@ -10,7 +10,7 @@ RELEASE="4.13"
 PULL_SECRET="/opt/dev-scripts/pull_secret.json"
 HTTP_PORT="8080"
 TLS_PORT="false"
-TIMEOUT="120"
+TIMEOUT="300"
 
 function usage {
     echo "USAGE:"
