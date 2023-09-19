@@ -35,13 +35,17 @@ while getopts "r:p:T:s:t:c:h" opt; do
     esac
 done
 
-for afile in ${CONFIGFILE:-} ${PULL_SECRET:-}; do
-    if [[ ! -e "$afile" ]]; then
-        echo "invalid config/pull_secret file $afile"
-        usage
-        exit 1
-    fi
-done
+if [[ ! -e ${CONFIGFILE:-} ]]; then
+    echo "ERROR: config file \"${CONFIGFILE:-}\" does not exist"
+    usage
+    exit 1
+fi
+
+if [[ ! -e ${PULL_SECRET:-} ]]; then
+    echo "ERROR: pull secret file \"${PULL_SECRET:-}\" does not exist"
+    usage
+    exit 1
+fi
 
 function timestamp {
     echo -n "$(date +%T) "

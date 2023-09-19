@@ -44,13 +44,13 @@ while getopts "i:I:s:c:p:T:t:h" opt; do
 done
 
 if [[ -z ${INTERFACE:-} ]]; then
-    echo "you must provide the network interface"
+    echo "ERROR: you must provide the network interface"
     usage
     exit 1
 fi
 
 if [[ ! -e ${CONFIGFILE:-} ]]; then
-    echo "invalid config file $CONFIGFILE"
+    echo "ERROR: config file \"${CONFIGFILE:-}\" does not exist"
     usage
     exit 1
 fi
