@@ -71,7 +71,7 @@ RELEASEIMAGE=$(curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp
 
 
 timestamp "creating the ironic image"
-IRONICIMAGE=$(podman run --rm "$RELEASEIMAGE" image ironic)
+IRONICIMAGE=$(podman run --authfile "$PULL_SECRET" --rm "$RELEASEIMAGE" image ironic)
 
 INPUTFILE=$(mktemp)
 function cleanup {
