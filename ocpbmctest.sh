@@ -66,9 +66,16 @@ for dep in curl jq yq podman; do
 done
 
 timestamp "getting the release image url"
-RELEASEIMAGE=$(curl -s https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/latest-"${RELEASE}"/release.txt \
-    | grep -o 'quay.io/openshift-release-dev/ocp-release.*')
-
+# shellcheck disable=SC2001
+MAJORV=$(echo "$RELEASE" | sed 's/\(^[0-9]\+\).*/\1/')
+LATESTTXT="https://mirror.openshift.com/pub/openshift-v${MAJORV}/clients/ocp-dev-preview/latest-${RELEASE}/release.txt"
+CANDIDTXT="https://mirror.openshift.com/pub/openshift-v${MAJORV}/clients/ocp-dev-preview/candidate-${RELEASE}/release.txt"
+if ! RELEASEIMAGE=$(curl -s "$LATESTTXT" | grep -o 'quay.io/openshift-release-dev/ocp-release.*'); then
+    if ! RELEASEIMAGE=$(curl -s "$CANDIDTXT" | grep -o 'quay.io/openshift-release-dev/ocp-release.*'); then
+        echo "ERROR: could not find release image url for $RELEASE"
+        exit 1
+    fi
+fi
 
 timestamp "creating the ironic image"
 IRONICIMAGE=$(podman run --authfile "$PULL_SECRET" --rm "$RELEASEIMAGE" image ironic)
