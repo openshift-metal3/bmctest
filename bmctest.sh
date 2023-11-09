@@ -220,6 +220,7 @@ export -f test_manage
 function test_power {
     local name=$1
     for power in on off; do
+        sleep 10
         if ! bmwrap node power "$power" "$name" --power-timeout "$TIMEOUT"; then
             echo "can not power $power ${name}" >> "$ERROR_LOG"
             return 1
@@ -297,6 +298,12 @@ function test_node {
     fi
     sleep 10
 
+    timestamp "testing ability to power on/off $name"
+    if test_power "$name"; then
+        echo "    success"
+    fi
+    sleep 10
+
     timestamp "verifying node boot device can be set on $name"
     if test_boot_device "$name"; then
         echo "    success"
@@ -311,12 +318,6 @@ function test_node {
 
     timestamp "testing vmedia detach on $name"
     if test_eject_media "$name" "$boot"; then
-        echo "    success"
-    fi
-    sleep 10
-
-    timestamp "testing ability to power on/off $name"
-    if test_power "$name"; then
         echo "    success"
     fi
 }
