@@ -6,7 +6,7 @@ set -eu
 # create the ironic image from openshift release and then call bmctest.sh
 
 # defaults
-RELEASE="4.13"
+RELEASE="4.18"
 PULL_SECRET="/opt/dev-scripts/pull_secret.json"
 HTTP_PORT="8080"
 TLS_PORT="false"
