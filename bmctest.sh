@@ -8,8 +8,8 @@ set -eu
 # this is used to skip the tests if we fail to start ironic
 SKIP_TESTS="false"
 # FIXME stable URL?
-export ISO="fedora-coreos-37.20230205.3.0-live.x86_64.iso"
-ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/37.20230205.3.0/x86_64/$ISO"
+export ISO="fedora-coreos-42.20250526.3.0-live-iso.x86_64.iso"
+ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/42.20250526.3.0/x86_64/$ISO"
 # use the upstream ironic image by default
 IRONICIMAGE="quay.io/metal3-io/ironic:latest"
 IRONICCLIENT="quay.io/metal3-io/ironic-client"
