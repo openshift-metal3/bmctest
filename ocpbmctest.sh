@@ -11,18 +11,20 @@ PULL_SECRET="/opt/dev-scripts/pull_secret.json"
 HTTP_PORT="8080"
 TLS_PORT="false"
 TIMEOUT="300"
+LOG_SAVE="on_error"
 
 function usage {
     echo "USAGE:"
-    echo "./$(basename "$0") [-r release_version] [-p http_port] [-T tls_port] [-s pull_secret] [-t timeout] -c install-config.yaml"
+    echo "./$(basename "$0") [-r release_version] [-p http_port] [-T tls_port] [-s pull_secret] [-t timeout] [-l always] -c install-config.yaml"
     echo "release version defaults to $RELEASE"
     echo "http_port for virtual media defaults to $HTTP_PORT"
     echo "-T tls_port switches virtual media to HTTPS"
     echo "pull_secret defaults to $PULL_SECRET"
     echo "timeout defaults to $TIMEOUT, it is used in 4 places for each tested machine"
+    echo "[-l always] saves the Ironic log even on success (default only on error)"
 }
 
-while getopts "r:p:T:s:t:c:h" opt; do
+while getopts "r:p:T:s:t:c:l:h" opt; do
     case $opt in
         h) usage; exit 0 ;;
         r) RELEASE=$OPTARG ;;
@@ -31,6 +33,7 @@ while getopts "r:p:T:s:t:c:h" opt; do
         s) PULL_SECRET=$OPTARG ;;
         t) TIMEOUT=$OPTARG ;;
         c) CONFIGFILE=$OPTARG ;;
+        l) LOG_SAVE=$OPTARG ;;
         ?) usage; exit 1 ;;
     esac
 done
@@ -107,4 +110,4 @@ yq -y '{hosts: [.platform.baremetal.hosts[] | {
         }]}' "$CONFIGFILE" > "$INPUTFILE"
 
 timestamp "calling bmctest.sh"
-"$(dirname "$0")"/bmctest.sh -i "$IRONICIMAGE" -I "$INTERFACE" -p "$HTTP_PORT" -T "$TLS_PORT" -t "$TIMEOUT" -s "$PULL_SECRET" -c "$INPUTFILE"
+"$(dirname "$0")"/bmctest.sh -i "$IRONICIMAGE" -I "$INTERFACE" -p "$HTTP_PORT" -T "$TLS_PORT" -t "$TIMEOUT" -s "$PULL_SECRET" -l "$LOG_SAVE" -c "$INPUTFILE"

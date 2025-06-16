@@ -18,18 +18,20 @@ PULL_SECRET=""
 export HTTP_PORT="8080"
 export TLS_PORT="false"
 export TIMEOUT="300"
+LOG_SAVE="on_error"
 
 function usage {
     echo "USAGE:"
-    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-T tls_port] [-t timeout] [-s pull_secret.json] -c config.yaml"
+    echo "./$(basename "$0") [-i ironic_image] -I interface [-p http_port] [-T tls_port] [-t timeout] [-s pull_secret.json] [-l always] -c config.yaml"
     echo "ironic image defaults to $IRONICIMAGE"
     echo "only specify pull_secret for openshift ironic image, not upstream"
     echo "http_port for virtual media defaults to $HTTP_PORT"
     echo "-T tls_port switches virtual media to HTTPS"
     echo "timeout defaults to $TIMEOUT, it is used in 4 places for each tested machine"
+    echo "[-l always] saves the Ironic log even on success (default only on error)"
 }
 
-while getopts "i:I:s:c:p:T:t:h" opt; do
+while getopts "i:I:s:c:p:T:t:l:h" opt; do
     case $opt in
         h) usage; exit 0 ;;
         i) IRONICIMAGE=$OPTARG ;;
@@ -39,6 +41,7 @@ while getopts "i:I:s:c:p:T:t:h" opt; do
         p) HTTP_PORT=$OPTARG ;;
         T) TLS_PORT=$OPTARG ;;
         t) TIMEOUT=$OPTARG ;;
+        l) LOG_SAVE=$OPTARG ;;
         ?) usage; exit 1 ;;
     esac
 done
@@ -333,9 +336,14 @@ EXIT=$(wc -l "$ERROR_LOG" | cut -d ' '  -f 1)
 echo; echo "========== Found $EXIT errors =========="
 cat "$ERROR_LOG"
 echo
+logf="ironic_$(date +%Y-%m-%d_%H-%M).log"
 if ! [ "$EXIT" -eq 0 ]; then
-    logf="ironic.log_$(date +%Y-%m-%d_%H-%M)"
     echo; echo "Errors found, saving container logs as $logf"
     sudo podman cp bmctest:/tmp/ironic.log "./$logf"
+else
+    if [ "$LOG_SAVE" = "always" ]; then
+        echo; echo "Saving log on success as $logf"
+        sudo podman cp bmctest:/tmp/ironic.log "./$logf"
+    fi
 fi
 exit "$EXIT"
