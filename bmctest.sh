@@ -127,32 +127,20 @@ sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
     --env OS_CLOUD=bmctest -v /srv/ironic:/shared --name bmctest \
     --entrypoint sleep "$IRONICIMAGE" infinity
 
-# baremetal cli runs either in the ironic server or ironic client container
-# depending if we run openshift or upstream ironic
-if [[ -z "$PULL_SECRET" ]]; then
-    timestamp "starting ironic client container"
-    sudo podman run --privileged --rm -d --net host --env  OS_CLOUD=bmctest \
-        --name bmcicli --entrypoint sleep $IRONICCLIENT infinity
-    sudo podman exec bmcicli bash -c "mkdir -p /etc/openstack"
-    sudo podman cp clouds.yaml bmcicli:/etc/openstack/clouds.yaml
-    function bmwrap {
-        # Use process-specific cache directory to avoid race condition accessing cache
-        local cache_dir="/tmp/ironic-cache-$$-$(date +%s%N)"
-        # shellcheck disable=SC2068
-        sudo podman exec -e XDG_CACHE_HOME="$cache_dir" bmcicli baremetal $@ # no quotes, we actually want splitting
-    }
-else
-    sudo podman exec bmctest bash -c "mkdir -p /etc/openstack"
-    sudo podman cp clouds.yaml bmctest:/etc/openstack/clouds.yaml
-    # FIXME python depreciation warnings inside container
-    sudo podman exec bmctest bash -c "echo -e '#!/usr/bin/env bash\npython3 -W ignore /usr/bin/baremetal \$@' > /usr/local/bin/bm"
-    sudo podman exec bmctest bash -c "chmod +x /usr/local/bin/bm"
-    function bmwrap {
-        # Use process-specific cache directory to avoid race condition accessing cache
-        local cache_dir="/tmp/ironic-cache-$$-$(date +%s%N)"
-        sudo podman exec -e XDG_CACHE_HOME="$cache_dir" bmctest bm "$@"
-    }
-fi
+# baremetal cli runs in the ironic client container
+# it is the upstream version, but it is also used for openshift
+timestamp "starting ironic client container"
+sudo podman run --privileged --rm -d --net host --env  OS_CLOUD=bmctest \
+    --name bmcicli --entrypoint sleep $IRONICCLIENT infinity
+sudo podman exec bmcicli bash -c "mkdir -p /etc/openstack"
+sudo podman cp clouds.yaml bmcicli:/etc/openstack/clouds.yaml
+function bmwrap {
+    # Use process-specific cache directory to avoid race condition accessing cache
+    local cache_dir
+    cache_dir="/tmp/ironic-cache-$$-$(date +%s%N)"
+    # shellcheck disable=SC2068
+    sudo podman exec -e XDG_CACHE_HOME="$cache_dir" bmcicli baremetal $@ # no quotes, we actually want splitting
+}
 export -f bmwrap
 
 # starting httpd
