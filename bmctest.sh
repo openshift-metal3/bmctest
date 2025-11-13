@@ -167,6 +167,50 @@ if ! sudo podman exec bmctest bash -c "ls -l /proc/*/exe | grep -q python3"; the
     SKIP_TESTS="true"
 fi
 
+# Function to get Ironic version
+function get_ironic_version {
+    local version
+    # Wait for API and try to get version (retry up to 10 times)
+    for i in {1..10}; do
+        version=$(curl -s http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
+        [[ -n "$version" && "$version" != "null" ]] && echo "$version" && return
+        sleep 1
+    done
+    # Fallback to container version or image name
+    version=$(sudo podman exec bmctest python3 -c "import ironic; print(ironic.__version__)" 2>/dev/null)
+    echo "${version:-$IRONICIMAGE}"
+}
+export -f get_ironic_version
+
+# Function to get BMC firmware version via Redfish
+function get_bmc_firmware_version {
+    local protocol=$1 address=$2 systemid=$3 user=$4 pass=$5
+    local base_url="${protocol}://${address}"
+    local version
+
+    # Try to get Manager link from System, then try common paths
+    local manager_path=$(curl -sk -u "${user}:${pass}" "${base_url}${systemid}" 2>/dev/null | \
+        jq -r '.Links.Managers[0]["@odata.id"] // empty' 2>/dev/null)
+
+    # Try manager paths in order: linked, then vendor-specific, then common defaults
+    for path in "$manager_path" "/redfish/v1/Managers/iDRAC.Embedded.1" "/redfish/v1/Managers/1" "/redfish/v1/Managers/iLO.Integrated.1" "/redfish/v1/Managers/BMC"; do
+        [[ -z "$path" || "$path" == "null" ]] && continue
+        version=$(curl -sk -u "${user}:${pass}" "${base_url}${path}" 2>/dev/null | \
+            jq -r '.FirmwareVersion // empty' 2>/dev/null)
+        [[ -n "$version" && "$version" != "null" ]] && echo "$version" && return
+    done
+
+    echo "unknown"
+}
+export -f get_bmc_firmware_version
+
+# Capture and display Ironic version (wait a bit for API to be ready)
+sleep 5
+timestamp "capturing Ironic version"
+IRONIC_VERSION=$(get_ironic_version)
+echo "Ironic Version: $IRONIC_VERSION"
+echo
+
 function test_manage {
     local name=$1; local boot=$2; local protocol=$3; local address=$4; local systemid=$5; local user=$6; local pass=$7; local insecure=$8
     case $insecure in
@@ -284,6 +328,11 @@ function test_node {
     local name=$1; local boot=$2; local protocol=$3; local address=$4; local systemid=$5; local user=$6; local pass=$7; local insecure=$8
     echo; echo "===== $name ====="
 
+    timestamp "capturing BMC firmware version for $name"
+    local bmc_fw_version=$(get_bmc_firmware_version "$protocol" "$address" "$systemid" "$user" "$pass")
+    echo "    BMC Firmware Version: $bmc_fw_version"
+    echo
+
     timestamp "attempting to manage $name (check address, credentials, certificates)"
     if test_manage "$name" "$boot" "$protocol" "$address" "$systemid" "$user" "$pass" "$insecure"; then
        echo "    success"
@@ -327,6 +376,10 @@ fi
 EXIT=$(wc -l "$ERROR_LOG" | cut -d ' '  -f 1)
 echo; echo "========== Found $EXIT errors =========="
 cat "$ERROR_LOG"
+echo
+echo "========== Version Information =========="
+echo "Ironic Version: $IRONIC_VERSION"
+echo "Ironic Image: $IRONICIMAGE"
 echo
 logf="ironic_$(date +%Y-%m-%d_%H-%M).log"
 if ! [ "$EXIT" -eq 0 ]; then
