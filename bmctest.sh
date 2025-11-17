@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -eux
 
 # bmctest.sh tests the hosts from the supplied yaml config file
 # are working with the required ironic opperations (register, power, virtual media)
@@ -169,7 +169,7 @@ fi
 
 # Function to get Ironic version
 function get_ironic_version {
-    local version
+    version
     # Wait for API and try to get version (retry up to 10 times)
     for _ in {1..10}; do
         version=$(curl -s http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
