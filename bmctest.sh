@@ -167,15 +167,36 @@ if ! sudo podman exec bmctest bash -c "ls -l /proc/*/exe | grep -q python3"; the
     SKIP_TESTS="true"
 fi
 
+# Function to wait for Ironic API to be available
+function wait_for_ironic_api {
+    local max_attempts=$TIMEOUT  # Check every 1 second
+    local attempt=1
+
+    echo "    checking API availability (timeout: ${TIMEOUT}s)"
+    while [ $attempt -le "$max_attempts" ]; do
+        if curl -s -f http://localhost:6385/v1 >/dev/null 2>&1; then
+            echo "    API available after $attempt seconds"
+            return 0
+        fi
+        echo -n "."
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    echo
+    echo "    API not available after ${TIMEOUT} seconds"
+    return 1
+}
+export -f wait_for_ironic_api
+
 # Function to get Ironic version
 function get_ironic_version {
     local version
-    # Wait for API and try to get version (retry up to 10 times)
-    for _ in {1..10}; do
-        version=$(curl -s http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
-        [[ -n "$version" && "$version" != "null" ]] && echo "$version" && return
-        sleep 1
-    done
+    # Get version from API (should be available now)
+    version=$(curl -s http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
+    if [[ -n "$version" && "$version" != "null" ]]; then
+        echo "$version"
+        return
+    fi
     # Fallback to container version or image name
     version=$(sudo podman exec bmctest python3 -c "import ironic; print(ironic.__version__)" 2>/dev/null)
     echo "${version:-$IRONICIMAGE}"
@@ -205,12 +226,17 @@ function get_bmc_firmware_version {
 }
 export -f get_bmc_firmware_version
 
-# Capture and display Ironic version (wait a bit for API to be ready)
-sleep 5
-timestamp "capturing Ironic version"
-IRONIC_VERSION=$(get_ironic_version)
-echo "Ironic Version: $IRONIC_VERSION"
-echo
+# Wait for Ironic API to be available
+timestamp "waiting for Ironic API to be available"
+if ! wait_for_ironic_api; then
+    echo "ERROR: Ironic API failed to become available within timeout" >> "$ERROR_LOG"
+    SKIP_TESTS="true"
+else
+    timestamp "capturing Ironic version"
+    IRONIC_VERSION=$(get_ironic_version)
+    echo "Ironic Version: $IRONIC_VERSION"
+    echo
+fi
 
 function test_manage {
     local name=$1; local boot=$2; local protocol=$3; local address=$4; local systemid=$5; local user=$6; local pass=$7; local insecure=$8
