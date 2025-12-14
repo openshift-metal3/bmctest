@@ -10,9 +10,7 @@ set -eu
 
 # this is used to skip the tests if we fail to start ironic
 SKIP_TESTS="false"
-# FIXME stable URL?
-export ISO="fedora-coreos-42.20250526.3.0-live-iso.x86_64.iso"
-ISO_URL="https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/42.20250526.3.0/x86_64/$ISO"
+COREOS_BUILDS="https://builds.coreos.fedoraproject.org/streams/stable.json"
 # use the upstream ironic image by default
 IRONICIMAGE="quay.io/metal3-io/ironic:latest"
 IRONICCLIENT="quay.io/metal3-io/ironic-client"
@@ -93,9 +91,12 @@ for dep in curl nc podman jq yq parallel; do
 done
 
 timestamp "checking / getting ISO image"
-if sudo [ ! -e /srv/ironic/html/images/${ISO} ]; then
+ISO_URL=$(curl -s "$COREOS_BUILDS" | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.location')
+ISO=$(basename "$ISO_URL")
+export ISO
+if sudo [ ! -e "/srv/ironic/html/images/${ISO}" ]; then
     sudo mkdir -p /srv/ironic/html/images/
-    sudo curl -L $ISO_URL -o /srv/ironic/html/images/${ISO}
+    sudo curl -L "$ISO_URL" -o "/srv/ironic/html/images/${ISO}"
 fi
 
 timestamp "checking / cleaning old containers"
