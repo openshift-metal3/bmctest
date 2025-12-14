@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# version 0.11 of shellcheck is bad with indirect function calls
+# shellcheck disable=SC2329
+
 set -eu
 
 # bmctest.sh tests the hosts from the supplied yaml config file
