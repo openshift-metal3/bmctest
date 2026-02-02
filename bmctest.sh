@@ -17,8 +17,9 @@ IRONICCLIENT="quay.io/metal3-io/ironic-client"
 PULL_SECRET=""
 # defaults
 export HTTP_PORT="8080"
-export TLS_PORT="false"
 export TIMEOUT="300"
+TLS_ENABLE="false"
+TLS_PORT=""
 LOG_SAVE="on_error"
 
 function usage {
@@ -57,6 +58,10 @@ if [[ ! -e ${CONFIGFILE:-} ]]; then
     echo "ERROR: config file \"${CONFIGFILE:-}\" does not exist"
     usage
     exit 1
+fi
+
+if [[ -n $TLS_PORT ]]; then
+    TLS_ENABLE="true"
 fi
 
 function timestamp {
@@ -115,7 +120,7 @@ if nc -z localhost "$HTTP_PORT"; then
     exit 1
 fi
 
-if [[ "$TLS_PORT" != "false" ]]; then
+if [[ "$TLS_ENABLE" == "true" ]]; then
     timestamp "checking TCP $TLS_PORT port for https is not already in use"
     if nc -z localhost "$TLS_PORT"; then
         echo "ERROR: https port already in use, exiting"
@@ -127,9 +132,9 @@ fi
 timestamp "starting ironic server container"
 sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
     --env PROVISIONING_INTERFACE="${INTERFACE}" --env HTTP_PORT="$HTTP_PORT" \
-    --env IRONIC_VMEDIA_TLS_SETUP="$TLS_PORT" --env VMEDIA_TLS_PORT="$TLS_PORT"  \
-    --env OS_CLOUD=bmctest -v /srv/ironic:/shared --name bmctest \
-    --entrypoint sleep "$IRONICIMAGE" infinity
+    --env IRONIC_VMEDIA_TLS_SETUP="$TLS_ENABLE" --env VMEDIA_TLS_PORT="$TLS_PORT"  \
+    --env OS_CLOUD=bmctest -v /srv/ironic:/shared \
+    --name bmctest --entrypoint sleep "$IRONICIMAGE" infinity
 
 # baremetal cli runs in the ironic client container
 # it is the upstream version, but it is also used for openshift
@@ -149,7 +154,7 @@ export -f bmwrap
 
 # starting httpd
 timestamp "starting httpd process"
-if [[ "$TLS_PORT" != "false" ]]; then
+if [[ "$TLS_ENABLE" == "true" ]]; then
     sudo podman exec bmctest bash -c "
         mkdir -p /certs/vmedia && cd /certs/vmedia
         make-dummy-cert bundle
@@ -161,7 +166,7 @@ sudo podman exec -d bmctest bash -c "/bin/runhttpd > /tmp/httpd.log 2>&1"
 
 # starting ironic
 timestamp "starting ironic process"
-if [[ "$TLS_PORT" != "false" ]]; then
+if [[ "$TLS_ENABLE" == "true" ]]; then
     sudo podman exec bmctest bash -c "sed -i '2i webserver_verify_ca = False' /etc/ironic/ironic.conf.j2"
 fi
 sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
@@ -314,14 +319,8 @@ function test_boot_vmedia {
     esac
     local ip
     ip=$(ip route get 1.1.1.1 | awk '{printf $7}')
-    local protocol; local port
-    if [[ "$TLS_PORT" != "false" ]]; then
-        protocol="https"; port="$TLS_PORT"
-    else
-        protocol="http"; port="$HTTP_PORT"
-    fi
     bmwrap node set "$name" --boot-interface "$boot_if" --deploy-interface ramdisk \
-        --instance-info boot_iso="${protocol}://${ip}:${port}/images/${ISO}"
+        --instance-info boot_iso="http://${ip}:${HTTP_PORT}/images/${ISO}"
     bmwrap node set "$name" --no-automated-clean
     echo -n "    " # indent baremetal output
     bmwrap node provide --wait "$TIMEOUT" "$name"
