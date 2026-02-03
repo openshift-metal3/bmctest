@@ -9,7 +9,7 @@ set -eu
 RELEASE="4.18"
 PULL_SECRET="/opt/dev-scripts/pull_secret.json"
 HTTP_PORT="8080"
-TLS_PORT="false"
+TLS_PORT=""
 TIMEOUT="300"
 LOG_SAVE="on_error"
 
