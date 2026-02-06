@@ -8,6 +8,13 @@ set -eu
 # bmctest.sh tests the hosts from the supplied yaml config file
 # are working with the required ironic opperations (register, power, virtual media)
 
+# Source common library functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/config.sh
+source "${SCRIPT_DIR}/lib/config.sh"
+
 # this is used to skip the tests if we fail to start ironic
 SKIP_TESTS="false"
 COREOS_BUILDS="https://builds.coreos.fedoraproject.org/streams/stable.json"
@@ -54,21 +61,21 @@ if [[ -z ${INTERFACE:-} ]]; then
     exit 1
 fi
 
-if [[ ! -e ${CONFIGFILE:-} ]]; then
-    echo "ERROR: config file \"${CONFIGFILE:-}\" does not exist"
+if ! validate_config_file "${CONFIGFILE:-}"; then
     usage
     exit 1
 fi
 
+timestamp "validating config structure"
+if ! validate_upstream_config "${CONFIGFILE}"; then
+    exit 1
+fi
+HOST_COUNT=$(count_hosts "${CONFIGFILE}" "upstream")
+timestamp "found $HOST_COUNT host(s) in config"
+
 if [[ -n $TLS_PORT ]]; then
     TLS_ENABLE="true"
 fi
-
-function timestamp {
-    echo -n "$(date +%T) "
-    echo "$1"
-}
-export -f timestamp
 
 ERROR_LOG=$(mktemp)
 export ERROR_LOG
@@ -82,18 +89,10 @@ function cleanup {
 trap "cleanup" EXIT
 
 timestamp "checking / installing dependencies (passwordless sudo, podman, curl, parallel, nc, yq)"
-if ! sudo true; then
-    echo "ERROR: passwordless sudo not available"
+if ! check_sudo; then
     exit 1
 fi
-for dep in curl nc podman jq yq parallel; do
-    if ! command -v $dep > /dev/null 2>&1; then
-        sudo dnf install -y curl nc jq podman python3-pip parallel
-        python3 -m pip install yq
-        echo "will cite" | parallel --citation > /dev/null 2>&1 || true
-        break
-    fi
-done
+ensure_dependencies curl nc podman jq yq parallel
 
 timestamp "checking / getting ISO image"
 ISO_URL=$(curl -s "$COREOS_BUILDS" | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.location')
@@ -109,21 +108,18 @@ sudo podman rm -f -t 0 bmctest
 sudo podman rm -f -t 0 bmcicli
 
 timestamp "checking TCP 6385 port for Ironic is not already in use"
-if nc -z localhost 6385; then
-    echo "ERROR: Ironic port already in use, exiting"
+if ! check_port_available 6385 "Ironic"; then
     exit 1
 fi
 
 timestamp "checking TCP $HTTP_PORT port for http is not already in use"
-if nc -z localhost "$HTTP_PORT"; then
-    echo "ERROR: http port already in use, exiting"
+if ! check_port_available "$HTTP_PORT" "HTTP"; then
     exit 1
 fi
 
 if [[ "$TLS_ENABLE" == "true" ]]; then
     timestamp "checking TCP $TLS_PORT port for https is not already in use"
-    if nc -z localhost "$TLS_PORT"; then
-        echo "ERROR: https port already in use, exiting"
+    if ! check_port_available "$TLS_PORT" "HTTPS"; then
         exit 1
     fi
 fi

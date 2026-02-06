@@ -19,6 +19,10 @@ actual test script.
 `bmctest.sh` - runs the tests on the nodes. This script is intended to be
 upstream compatible with Ironic, leaving out the OpenShift specifics.
 
+Both scripts now use shared libraries in the `lib/` directory for common
+functionality like validation, configuration parsing, and logging. See
+[INTEGRATION.md](INTEGRATION.md) for detailed architecture documentation.
+
 # Requirements
 
 Scripts need to be run as unprivileged user with passwordless sudo.
@@ -38,6 +42,20 @@ with dnf for RPM distros:
 - curl
 - parallel (GNU)
 - nc
+
+# Project Structure
+
+```
+bmctest/
+├── lib/                     # Shared libraries
+│   ├── common.sh           # Common utilities (validation, logging, etc.)
+│   └── config.sh           # Config parsing and transformation
+├── bmctest.sh              # Upstream Ironic test entry point
+├── ocpbmctest.sh           # OpenShift test entry point
+├── clouds.yaml             # Ironic API credentials
+├── INTEGRATION.md          # Detailed architecture documentation
+└── README.md               # This file
+```
 
 # Configuration
 
@@ -103,4 +121,39 @@ hosts:
 
 `insecure` is the equivalent of `disableCertificateVerification`, meaning it
 will not check the https certificate of the BMC.
+
+# Enhanced Features
+
+## Configuration Validation
+
+Both scripts now validate configuration files before execution:
+- OpenShift configs checked for required `platform.baremetal` section
+- Upstream configs validated for proper structure
+- Early detection of missing or malformed fields
+- Clear error messages indicating what's wrong
+
+## Debug Mode
+
+Enable detailed logging by setting `BMCTEST_DEBUG=1`:
+
+```bash
+# See config transformation details
+BMCTEST_DEBUG=1 ./ocpbmctest.sh -c install-config.yaml
+
+# Debug validation steps
+BMCTEST_DEBUG=1 ./bmctest.sh -I eth0 -c config.yaml
+```
+
+## Host Count Display
+
+Scripts report the number of hosts found in the configuration:
+```
+16:20:30 found 3 host(s) in config, using interface: eth0
+```
+
+# Documentation
+
+- [README.md](README.md) - This file, basic usage and configuration
+- [INTEGRATION.md](INTEGRATION.md) - Detailed architecture and integration documentation
+- [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) - AI assistant guidance for code contributions
 

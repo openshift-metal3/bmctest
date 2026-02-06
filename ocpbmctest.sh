@@ -5,6 +5,13 @@ set -eu
 # intermediate script to parse install-config.yaml,
 # create the ironic image from openshift release and then call bmctest.sh
 
+# Source common library functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/config.sh
+source "${SCRIPT_DIR}/lib/config.sh"
+
 # defaults
 RELEASE="4.18"
 PULL_SECRET="/opt/dev-scripts/pull_secret.json"
@@ -38,35 +45,21 @@ while getopts "r:p:T:s:t:c:l:h" opt; do
     esac
 done
 
-if [[ ! -e ${CONFIGFILE:-} ]]; then
-    echo "ERROR: config file \"${CONFIGFILE:-}\" does not exist"
+if ! validate_config_file "${CONFIGFILE:-}"; then
     usage
     exit 1
 fi
 
-if [[ ! -e ${PULL_SECRET:-} ]]; then
-    echo "ERROR: pull secret file \"${PULL_SECRET:-}\" does not exist"
+if ! validate_file_exists "${PULL_SECRET:-}" "pull secret file"; then
     usage
     exit 1
 fi
-
-function timestamp {
-    echo -n "$(date +%T) "
-    echo "$1"
-}
 
 timestamp "checking/installing dependencies (passwordless sudo, yq, curl, podman)"
-if ! sudo true; then
-    echo "ERROR: passwordless sudo not available"
+if ! check_sudo; then
     exit 1
 fi
-for dep in curl jq yq podman; do
-    if ! command -v $dep > /dev/null 2>&1; then
-        sudo dnf install -y curl jq podman python3-pip
-        python3 -m pip install yq
-        break
-    fi
-done
+ensure_dependencies curl jq yq podman
 
 timestamp "getting the release image url"
 # shellcheck disable=SC2001
@@ -89,25 +82,33 @@ function cleanup {
 }
 trap "cleanup" EXIT
 
-timestamp "extracting the provisioning interface from $CONFIGFILE"
-INTERFACE=$(yq -r '.platform.baremetal.provisioningBridge' "$CONFIGFILE")
-if [[ -z "$INTERFACE" || $INTERFACE = "null" ]]; then
-    timestamp "WARNING: found no provision interface in config, defaulting to 'externalBridge'"
-    INTERFACE=$(yq -r '.platform.baremetal.externalBridge' "$CONFIGFILE")
+timestamp "validating OpenShift config structure"
+if ! validate_ocp_config "$CONFIGFILE"; then
+    exit 1
 fi
 
-timestamp "extracting the hosts from $CONFIGFILE"
-yq -y '{hosts: [.platform.baremetal.hosts[] | {
-        name,
-        bmc: {
-            boot: (.bmc.address | capture("(?<boot>[^+:]+)")).boot,
-            protocol: (.bmc.address | if test("\\+(?<proto>[^:]+)") then (. | capture("\\+(?<proto>[^:]+)")).proto else "https" end),
-            address: (.bmc.address | capture("://(?<addr>[^/]+)")).addr,
-            systemid: (.bmc.address | capture("://(?<addr>[^/]+)(?<path>/.*$)")).path,
-            username: .bmc.username,
-            password: .bmc.password,
-            insecure: .bmc.disableCertificateVerification }
-        }]}' "$CONFIGFILE" > "$INPUTFILE"
+timestamp "extracting the provisioning interface from $CONFIGFILE"
+if ! INTERFACE=$(get_ocp_interface "$CONFIGFILE"); then
+    exit 1
+fi
+HOST_COUNT=$(count_hosts "$CONFIGFILE" "ocp")
+timestamp "found $HOST_COUNT host(s) in config, using interface: $INTERFACE"
+
+timestamp "transforming config to upstream format"
+if ! transform_ocp_to_upstream "$CONFIGFILE" "$INPUTFILE"; then
+    exit 1
+fi
+
+if [[ "${BMCTEST_DEBUG:-0}" == "1" ]]; then
+    debug_log "Transformed config:"
+    cat "$INPUTFILE" >&2
+fi
+
+timestamp "validating transformed config"
+if ! validate_upstream_config "$INPUTFILE"; then
+    echo "ERROR: Config transformation failed validation"
+    exit 1
+fi
 
 timestamp "calling bmctest.sh"
 "$(dirname "$0")"/bmctest.sh -i "$IRONICIMAGE" -I "$INTERFACE" -p "$HTTP_PORT" -T "$TLS_PORT" -t "$TIMEOUT" -s "$PULL_SECRET" -l "$LOG_SAVE" -c "$INPUTFILE"
