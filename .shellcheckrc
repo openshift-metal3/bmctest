@@ -1,1 +1,2 @@
 disable=SC2317 # parallel and trap fool shellcheck
+disable=SC1091 # can't follow dynamically sourced library files (checked separately)
