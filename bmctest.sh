@@ -405,7 +405,7 @@ echo; echo "========== Found $EXIT errors =========="
 cat "$ERROR_LOG"
 echo
 echo "========== Version Information =========="
-echo "Ironic Version: $IRONIC_VERSION"
+echo "Ironic Version: ${IRONIC_VERSION:-unknown}"
 echo "Ironic Image: $IRONICIMAGE"
 echo
 logf="ironic_$(date +%Y-%m-%d_%H-%M).log"
