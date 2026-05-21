@@ -66,6 +66,12 @@ if ! validate_file_exists "${CONFIGFILE:-}" "config file"; then
     exit 1
 fi
 
+timestamp "checking / installing dependencies (passwordless sudo, podman, curl, parallel, nc, yq)"
+if ! check_sudo; then
+    exit 1
+fi
+ensure_dependencies
+
 timestamp "validating config structure"
 if ! validate_upstream_config "${CONFIGFILE}"; then
     exit 1
@@ -88,11 +94,6 @@ function cleanup {
 }
 trap "cleanup" EXIT
 
-timestamp "checking / installing dependencies (passwordless sudo, podman, curl, parallel, nc, yq)"
-if ! check_sudo; then
-    exit 1
-fi
-ensure_dependencies
 
 timestamp "checking / getting ISO image"
 ISO_URL=$(curl -s "$COREOS_BUILDS" | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.location')
