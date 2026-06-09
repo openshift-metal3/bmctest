@@ -73,7 +73,7 @@ fi
 ensure_dependencies
 
 timestamp "validating config structure"
-if ! validate_upstream_config "${CONFIGFILE}"; then
+if ! validate_upstream_config ${CONFIGFILE}; then
     exit 1
 fi
 HOST_COUNT=$(count_hosts "${CONFIGFILE}" "upstream")
