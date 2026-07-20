@@ -137,6 +137,9 @@ sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
     --env PROVISIONING_INTERFACE="${INTERFACE}" --env HTTP_PORT="$HTTP_PORT" \
     --env IRONIC_VMEDIA_TLS_SETUP="$TLS_ENABLE" --env VMEDIA_TLS_PORT="$TLS_PORT"  \
     --env IRONIC_HTPASSWD="$IRONIC_HTPASSWD" \
+    --env IRONIC_TLS_SETUP=true \
+    --env IRONIC_CERT_FILE=/certs/ironic/tls.crt \
+    --env IRONIC_KEY_FILE=/certs/ironic/tls.key \
     --env OS_CLOUD=bmctest -v /srv/ironic:/shared \
     --name bmctest --entrypoint sleep "$IRONICIMAGE" infinity
 
@@ -150,7 +153,8 @@ CLOUDS_YAML=$(mktemp)
 cat > "$CLOUDS_YAML" <<EOF
 clouds:
  bmctest:
-  baremetal_endpoint_override: http://localhost:6385/v1
+  baremetal_endpoint_override: https://localhost:6385/v1
+  verify: false
   auth_type: http_basic
   auth:
    username: ${IRONIC_USERNAME}
@@ -179,6 +183,14 @@ if [[ "$TLS_ENABLE" == "true" ]]; then
 fi
 sudo podman exec -d bmctest bash -c "/bin/runhttpd > /tmp/httpd.log 2>&1"
 
+# generate self-signed cert for Ironic API TLS
+sudo podman exec bmctest bash -c "
+    mkdir -p /certs/ironic && cd /certs/ironic
+    make-dummy-cert bundle
+    csplit -f tls --suppress-matched bundle /^$/
+    mv tls00 tls.key && chmod 600 tls.key
+    mv tls01 tls.crt && rm bundle"
+
 # starting ironic
 timestamp "starting ironic process"
 if [[ "$TLS_ENABLE" == "true" ]]; then
@@ -198,7 +210,7 @@ function wait_for_ironic_api {
 
     echo "    checking API availability (timeout: ${TIMEOUT}s)"
     while [ $attempt -le "$max_attempts" ]; do
-        if curl -s -f -u "${IRONIC_USERNAME}:${IRONIC_PASSWORD}" http://localhost:6385/v1 >/dev/null 2>&1; then
+        if curl -sk -f https://localhost:6385/v1 >/dev/null 2>&1; then
             echo "    API available after $attempt seconds"
             return 0
         fi
@@ -216,7 +228,7 @@ export -f wait_for_ironic_api
 function get_ironic_version {
     local version
     # Get version from API (should be available now)
-    version=$(curl -s -u "${IRONIC_USERNAME}:${IRONIC_PASSWORD}" http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
+    version=$(curl -sk https://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
     if [[ -n "$version" && "$version" != "null" ]]; then
         echo "$version"
         return
