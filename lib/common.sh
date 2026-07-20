@@ -22,7 +22,7 @@ function check_sudo {
 # Ensure all required dependencies are installed
 # Usage: ensure_dependencies
 function ensure_dependencies {
-    local deps=(curl nc podman jq yq parallel)
+    local deps=(curl nc podman jq yq parallel htpasswd)
     local missing=()
 
     for dep in "${deps[@]}"; do
@@ -33,7 +33,7 @@ function ensure_dependencies {
 
     if [ ${#missing[@]} -gt 0 ]; then
         timestamp "installing missing dependencies: ${missing[*]}"
-        sudo dnf install -y curl jq podman python3-pip parallel nc
+        sudo dnf install -y curl jq podman python3-pip parallel nc httpd-tools
         python3 -m pip install yq
         echo "will cite" | parallel --citation > /dev/null 2>&1 || true
     fi

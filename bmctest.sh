@@ -83,6 +83,12 @@ if [[ -n $TLS_PORT ]]; then
     TLS_ENABLE="true"
 fi
 
+# ironic auth
+export IRONIC_USERNAME="bmctest"
+IRONIC_PASSWORD=$(head -c 20 /dev/urandom | base64)
+export IRONIC_PASSWORD
+IRONIC_HTPASSWD=$(htpasswd -nbB "${IRONIC_USERNAME}" "${IRONIC_PASSWORD}")
+
 ERROR_LOG=$(mktemp)
 export ERROR_LOG
 function cleanup {
@@ -130,6 +136,7 @@ timestamp "starting ironic server container"
 sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
     --env PROVISIONING_INTERFACE="${INTERFACE}" --env HTTP_PORT="$HTTP_PORT" \
     --env IRONIC_VMEDIA_TLS_SETUP="$TLS_ENABLE" --env VMEDIA_TLS_PORT="$TLS_PORT"  \
+    --env IRONIC_HTPASSWD="$IRONIC_HTPASSWD" \
     --env OS_CLOUD=bmctest -v /srv/ironic:/shared \
     --name bmctest --entrypoint sleep "$IRONICIMAGE" infinity
 
@@ -139,7 +146,18 @@ timestamp "starting ironic client container"
 sudo podman run --privileged --rm -d --net host --env  OS_CLOUD=bmctest \
     --name bmcicli --entrypoint sleep $IRONICCLIENT infinity
 sudo podman exec bmcicli bash -c "mkdir -p /etc/openstack"
-sudo podman cp clouds.yaml bmcicli:/etc/openstack/clouds.yaml
+CLOUDS_YAML=$(mktemp)
+cat > "$CLOUDS_YAML" <<EOF
+clouds:
+ bmctest:
+  baremetal_endpoint_override: http://localhost:6385/v1
+  auth_type: http_basic
+  auth:
+   username: ${IRONIC_USERNAME}
+   password: ${IRONIC_PASSWORD}
+EOF
+sudo podman cp "$CLOUDS_YAML" bmcicli:/etc/openstack/clouds.yaml
+rm -f "$CLOUDS_YAML"
 function bmwrap {
     # Use process-specific cache directory to avoid race condition accessing cache
     local cache_dir
@@ -180,7 +198,7 @@ function wait_for_ironic_api {
 
     echo "    checking API availability (timeout: ${TIMEOUT}s)"
     while [ $attempt -le "$max_attempts" ]; do
-        if curl -s -f http://localhost:6385/v1 >/dev/null 2>&1; then
+        if curl -s -f -u "${IRONIC_USERNAME}:${IRONIC_PASSWORD}" http://localhost:6385/v1 >/dev/null 2>&1; then
             echo "    API available after $attempt seconds"
             return 0
         fi
@@ -198,7 +216,7 @@ export -f wait_for_ironic_api
 function get_ironic_version {
     local version
     # Get version from API (should be available now)
-    version=$(curl -s http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
+    version=$(curl -s -u "${IRONIC_USERNAME}:${IRONIC_PASSWORD}" http://localhost:6385/v1 2>/dev/null | jq -r '.version.version // .default_version.version // empty' 2>/dev/null)
     if [[ -n "$version" && "$version" != "null" ]]; then
         echo "$version"
         return
