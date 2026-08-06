@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -eu
+set -x
 
 # intermediate script to parse install-config.yaml,
 # create the ironic image from openshift release and then call bmctest.sh

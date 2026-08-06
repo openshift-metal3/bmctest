@@ -62,10 +62,10 @@ function count_hosts {
 
     case $format in
         ocp)
-            count=$(yq -r '.platform.baremetal.hosts | length' "$config" 2>/dev/null || echo "0")
+            count=$(yq -r '.platform.baremetal.hosts | length' "$config" || echo "0")
             ;;
         upstream)
-            count=$(yq -r '.hosts | length' "$config" 2>/dev/null || echo "0")
+            count=$(yq -r '.hosts | length' "$config" || echo "0")
             ;;
         *)
             echo "0"
@@ -84,7 +84,7 @@ function validate_ocp_config {
     debug_log "Validating OpenShift config structure"
 
     # Check for required platform.baremetal section
-    if ! yq -e '.platform.baremetal' "$config" >/dev/null 2>&1; then
+    if ! yq -e '.platform.baremetal' "$config" >/dev/null; then
         echo "ERROR: config missing platform.baremetal section"
         return 1
     fi
@@ -92,6 +92,7 @@ function validate_ocp_config {
     # Check for provisioning interface
     local interface
     interface=$(yq -r '.platform.baremetal.provisioningBridge // .platform.baremetal.externalBridge // empty' "$config")
+    cat "$config"
     if [[ -z "$interface" || "$interface" == "null" ]]; then
         echo "ERROR: config missing provisioningBridge or externalBridge"
         return 1
@@ -99,7 +100,7 @@ function validate_ocp_config {
 
     # Check for hosts
     local host_count
-    host_count=$(yq -r '.platform.baremetal.hosts | length' "$config" 2>/dev/null || echo "0")
+    host_count=$(yq -r '.platform.baremetal.hosts | length' "$config" || echo "0")
     if [[ "$host_count" -eq 0 ]]; then
         echo "ERROR: config has no hosts defined"
         return 1
@@ -117,14 +118,14 @@ function validate_upstream_config {
     debug_log "Validating upstream config structure"
 
     # Check for hosts section
-    if ! yq -e '.hosts' "$config" >/dev/null 2>&1; then
+    if ! yq -e '.hosts' "$config" >/dev/null; then
         echo "ERROR: config missing hosts section"
         return 1
     fi
 
     # Check for hosts
     local host_count
-    host_count=$(yq -r '.hosts | length' "$config" 2>/dev/null || echo "0")
+    host_count=$(yq -r '.hosts | length' "$config" || echo "0")
     if [[ "$host_count" -eq 0 ]]; then
         echo "ERROR: config has no hosts defined"
         return 1
@@ -132,7 +133,7 @@ function validate_upstream_config {
 
     # Validate each host has required BMC fields
     local invalid_hosts
-    invalid_hosts=$(yq -r '.hosts[] | select(.bmc.address == null or .bmc.username == null) | .name // "unnamed"' "$config" 2>/dev/null)
+    invalid_hosts=$(yq -r '.hosts[] | select(.bmc.address == null or .bmc.username == null) | .name // "unnamed"' "$config")
     if [[ -n "$invalid_hosts" ]]; then
         echo "ERROR: hosts missing required BMC fields: $invalid_hosts"
         return 1
