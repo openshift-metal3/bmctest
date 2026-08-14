@@ -34,12 +34,7 @@ function ensure_dependencies {
     if [ ${#missing[@]} -gt 0 ]; then
         timestamp "installing missing dependencies: ${missing[*]}"
         sudo dnf install -y curl jq podman python3-pip parallel nc
-        if python3 -c 'import sys; sys.exit(0 if sys.version_info < (3, 10) else 1)'; then
-            echo "Python version is < 3.10. Installing argcomplete < 3.7"
-            python3 -m pip install 'yq' 'argcomplete<3.7'
-        else
-            python3 -m pip install yq
-        fi
+        python3 -m pip install yq
         echo "will cite" | parallel --citation > /dev/null 2>&1 || true
     fi
 }
