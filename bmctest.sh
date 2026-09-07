@@ -147,7 +147,7 @@ sudo podman run --privileged --authfile "$PULL_SECRET" --rm -d --net host \
 # it is the upstream version, but it is also used for openshift
 timestamp "starting ironic client container"
 sudo podman run --privileged --rm -d --net host --env  OS_CLOUD=bmctest \
-    --name bmcicli --entrypoint sleep $IRONICCLIENT infinity
+    --user root --name bmcicli --entrypoint sleep $IRONICCLIENT infinity
 sudo podman exec bmcicli bash -c "mkdir -p /etc/openstack"
 CLOUDS_YAML=$(mktemp)
 cat > "$CLOUDS_YAML" <<EOF
