@@ -196,12 +196,48 @@ timestamp "starting ironic process"
 if [[ "$TLS_ENABLE" == "true" ]]; then
     sudo podman exec bmctest bash -c "sed -i '2i webserver_verify_ca = False' /etc/ironic/ironic.conf.j2"
 fi
-sudo podman exec -d bmctest bash -c "runironic > /tmp/ironic.log 2>&1"
+sudo podman exec -d bmctest bash -c 'echo $$ > /tmp/ironic.pid && exec runironic > /tmp/ironic.log 2>&1'
 sleep 5
 if ! sudo podman exec bmctest bash -c "ls -l /proc/*/exe | grep -q python3"; then
     echo "no python3 process inside container, looks like ironic failed to start, not running tests, check log" >> "$ERROR_LOG"
     SKIP_TESTS="true"
 fi
+
+function stop_ironic {
+    local pid
+    if ! pid=$(sudo podman exec bmctest cat /tmp/ironic.pid 2>/dev/null); then
+        timestamp "Ironic PID file not found, skipping process shutdown"
+        return 0
+    fi
+    if [[ ! "$pid" =~ ^[0-9]+$ ]]; then
+        timestamp "Invalid Ironic PID '$pid', skipping process shutdown"
+        return 0
+    fi
+
+    timestamp "stopping Ironic process"
+    if sudo podman exec bmctest bash -c '
+        pid=$1
+        kill -TERM "$pid" 2>/dev/null || true
+        for _ in {1..10}; do
+            kill -0 "$pid" 2>/dev/null || exit 0
+            sleep 1
+        done
+
+        echo "Ironic did not stop after 10 seconds; sending SIGKILL" >&2
+        kill -KILL "$pid" 2>/dev/null || true
+        for _ in {1..5}; do
+            kill -0 "$pid" 2>/dev/null || exit 0
+            sleep 1
+        done
+        exit 1
+    ' _ "$pid"; then
+        timestamp "Ironic process stopped"
+        return 0
+    fi
+
+    timestamp "ERROR: unable to stop Ironic process (PID $pid)"
+    return 1
+}
 
 # Function to wait for Ironic API to be available
 function wait_for_ironic_api {
@@ -429,6 +465,12 @@ if [[ "$SKIP_TESTS" = "false" ]]; then
     timestamp "testing, can take several minutes, please wait for results ..."
     yq -r '.hosts[] | "\(.name) \(.bmc.boot) \(.bmc.protocol) \(.bmc.address) \(.bmc.systemid) \(.bmc.username) \(.bmc.password) \(.bmc.insecure)"' \
     "$CONFIGFILE" | parallel --colsep ' ' -a - test_node
+fi
+
+# All test workers have finished; stop Ironic before exporting its log so the
+# file cannot grow while podman cp is archiving it.
+if ! stop_ironic; then
+    echo "could not stop Ironic before saving its log" >> "$ERROR_LOG"
 fi
 
 EXIT=$(wc -l "$ERROR_LOG" | cut -d ' '  -f 1)
